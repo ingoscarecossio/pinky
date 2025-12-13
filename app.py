@@ -1,136 +1,290 @@
-import streamlit as st
-import numpy as np
-import plotly.graph_objects as go
+\
 import time
+import numpy as np
+import pandas as pd
+import streamlit as st
+import plotly.graph_objects as go
 
-st.set_page_config(
-    page_title="Preference Collapse",
-    page_icon="🧠",
-    layout="wide"
-)
+# -----------------------------------------
+# Streamlit WOW v3 (seminario)
+# - ASCII-only source (portable)
+# - Math rendered via LaTeX
+# -----------------------------------------
+st.set_page_config(page_title="Preferencias dicotomicas — seminario", page_icon="🧠", layout="wide")
 
-st.markdown("""
-<style>
-body {
-    background: linear-gradient(180deg, #0f0f14, #151520);
-}
-</style>
-""", unsafe_allow_html=True)
+st.title("🧠 Preferencias dicotomicas: de nota a estructura (nivel seminario)")
+st.caption("Formalizacion canonica, propiedades, visualizacion estructural y comparacion con modelos cercanos.")
 
-st.title("🧠 Preference Collapse")
-st.caption("Cuando una preferencia binaria destruye un mundo continuo")
+# ========= Modelo (dicotomico) =========
+def u(is_pinky: bool) -> int:
+    return 1 if is_pinky else 0
 
-# -----------------------------
-# Sidebar
-# -----------------------------
+def weak_pref(i, j, P):
+    # x \succeq y  <=> (x in P) OR (y in P^c)
+    return P[i] or (not P[j])
+
+def strict_pref(i, j, P):
+    # x \succ y <=> (x in P) AND (y in P^c)
+    return P[i] and (not P[j])
+
+def indifferent(i, j, P):
+    # x ~ y <=> both in P or both in P^c
+    return (P[i] and P[j]) or ((not P[i]) and (not P[j]))
+
+def symbol(i, j, P):
+    if i == j:
+        return "~"
+    if strict_pref(i, j, P):
+        return "succ"
+    if indifferent(i, j, P):
+        return "~"
+    return "succeq" if weak_pref(i, j, P) else "preceq"
+
+def build_rel(names, P):
+    n = len(names)
+    R = np.empty((n, n), dtype=object)
+    for i in range(n):
+        for j in range(n):
+            R[i, j] = symbol(i, j, P)
+    return R
+
+def rel_num(R):
+    m = {"succ": 2.0, "~": 1.0, "succeq": 1.5, "preceq": 0.5}
+    return np.vectorize(lambda s: m.get(s, 0.0))(R)
+
+# ========= Axiomas =========
+def complete(P):
+    n = len(P)
+    for i in range(n):
+        for j in range(n):
+            if not (weak_pref(i, j, P) or weak_pref(j, i, P)):
+                return False
+    return True
+
+def transitive(P):
+    n = len(P)
+    for i in range(n):
+        for j in range(n):
+            for k in range(n):
+                if weak_pref(i, j, P) and weak_pref(j, k, P) and (not weak_pref(i, k, P)):
+                    return False
+    return True
+
+# ========= Sidebar =========
 with st.sidebar:
-    st.header("🎛 Control")
-    n = st.slider("Número de alternativas", 100, 1500, 600, 50)
-    p_share = st.slider("Proporción Pinky (P)", 0.1, 0.9, 0.5, 0.05)
-    animate = st.checkbox("Animar colapso", value=True)
-    seed = st.number_input("Semilla", value=42, step=1)
+    st.header("⚙️ Experimento")
+    n = st.slider("Cardinalidad de X", 4, 24, 10, 1)
 
-# -----------------------------
-# Generate world
-# -----------------------------
-rng = np.random.default_rng(seed)
-X = rng.normal(0, 1, size=(n, 2))   # mundo continuo
-is_pinky = rng.random(n) < p_share
+    default_names = ", ".join([f"x{i+1}" for i in range(n)])
+    names_str = st.text_input("Etiquetas (coma)", value=default_names)
+    names = [s.strip() for s in names_str.split(",") if s.strip()]
+    if len(names) != n:
+        st.warning("Etiquetas inconsistentes. Se usan x1,...,xn.")
+        names = [f"x{i+1}" for i in range(n)]
 
-u = np.where(is_pinky, 1.0, 0.0)
+    st.divider()
+    st.subheader("Particion P / P^c")
+    mode = st.radio("Modo", ["Manual", "Aleatorio (demo)"], index=0)
 
-# -----------------------------
-# Initial state
-# -----------------------------
-st.subheader("1️⃣ Mundo original (aparente complejidad)")
+    if mode.startswith("Aleatorio"):
+        p_share = st.slider("Proporcion esperada en P", 0.1, 0.9, 0.5, 0.05)
+        seed = st.number_input("Semilla", value=11, step=1)
+        rng = np.random.default_rng(int(seed))
+        P = list(rng.random(n) < p_share)
+    else:
+        P = []
+        for i, nm in enumerate(names):
+            P.append(st.checkbox(f"{nm} in P", value=(i % 2 == 0)))
 
-fig0 = go.Figure()
-fig0.add_trace(go.Scatter(
-    x=X[:,0], y=X[:,1],
-    mode="markers",
-    marker=dict(
-        size=6,
-        color=X[:,0]**2 + X[:,1]**2,
-        colorscale="Viridis",
-        opacity=0.85
-    ),
-    hoverinfo="skip"
-))
+    st.divider()
+    st.subheader("Show")
+    autoplay = st.checkbox("Animacion", value=True)
+    speed = st.slider("Velocidad", 1, 10, 6, 1)
+    max_edges = st.slider("Max flechas (P -> P^c)", 20, 500, 180, 10)
+    show_edge_labels = st.checkbox("Etiqueta \\succ en flechas", value=False)
 
-fig0.update_layout(
-    height=500,
-    margin=dict(l=10, r=10, t=10, b=10),
-    xaxis=dict(visible=False),
-    yaxis=dict(visible=False)
-)
+P_set = [names[i] for i in range(n) if P[i]]
+Pc_set = [names[i] for i in range(n) if not P[i]]
 
-st.plotly_chart(fig0, use_container_width=True)
+tab1, tab2, tab3 = st.tabs(["Modelo", "Visualizacion", "Comparacion"])
 
-# -----------------------------
-# Collapse animation
-# -----------------------------
-st.subheader("2️⃣ Aplicar preferencia Pinky")
+# ========= TAB 1: Modelo =========
+with tab1:
+    st.subheader("Formalizacion canonica")
+    st.markdown(r"""
+Sea $X$ el conjunto de alternativas y $P \subset X$ un subconjunto distinguido. Con $P^c = X \setminus P$:
 
-collapse = st.slider(
-    "Intensidad de colapso",
-    0.0, 1.0, 0.0, 0.01
-)
+- Preferencia estricta:  $x \succ y \iff (x \in P) \land (y \in P^c)$
+- Indiferencia intra-bloque:  $x \sim y$ si ambos estan en $P$ o ambos estan en $P^c$
+- Representacion ordinal natural (indicadora):
+$$
+u(x)=\begin{cases}
+1 & x \in P \\
+0 & x \in P^c
+\end{cases}
+\qquad\Rightarrow\qquad x \succeq y \iff u(x)\ge u(y)
+$$
+""")
 
-Y_collapsed = (1 - collapse) * X[:,1] + collapse * (u * 2 - 1)
+    st.info(f"P = {P_set if P_set else ['∅']}    |    P^c = {Pc_set if Pc_set else ['∅']}")
 
-fig1 = go.Figure()
-fig1.add_trace(go.Scatter(
-    x=X[:,0],
-    y=Y_collapsed,
-    mode="markers",
-    marker=dict(
-        size=6,
-        color=u,
-        colorscale=[[0, "#ff4d4d"], [1, "#7CFF00"]],
-        opacity=0.9
-    ),
-    hoverinfo="skip"
-))
+    st.subheader("Propiedades (axiomas)")
+    c_ok = complete(P)
+    t_ok = transitive(P)
+    st.write("Completitud:", "✅ satisfecha" if c_ok else "❌ no satisfecha")
+    st.write("Transitividad:", "✅ satisfecha" if t_ok else "❌ no satisfecha")
 
-fig1.update_layout(
-    height=500,
-    margin=dict(l=10, r=10, t=10, b=10),
-    xaxis=dict(visible=False),
-    yaxis=dict(visible=False)
-)
+    st.markdown(r"""
+**Lectura estructural (lo que impresiona a alguien experto):**
+- Este preorden colapsa exactamente en **dos clases de equivalencia** ($P$ y $P^c$).
+- Dentro de cada clase no hay informacion ordinal adicional.
+- Cualquier refinamiento del ranking requiere **supuestos extra** (atributos, umbrales, lexicografia, etc.).
+""")
 
-st.plotly_chart(fig1, use_container_width=True)
+    st.subheader("Utilidad indicadora y 'rigidez'")
+    util_df = pd.DataFrame({
+        "Alternativa": names,
+        "Grupo": ["P" if P[i] else "P^c" for i in range(n)],
+        "u(x)": [u(P[i]) for i in range(n)]
+    }).sort_values(["u(x)", "Alternativa"], ascending=[False, True])
+    st.dataframe(util_df, use_container_width=True, hide_index=True)
 
-# -----------------------------
-# Information collapse
-# -----------------------------
-st.subheader("3️⃣ Colapso de información")
+    fig_u = go.Figure()
+    fig_u.add_trace(go.Bar(x=util_df["Alternativa"], y=util_df["u(x)"]))
+    fig_u.update_layout(
+        height=320, margin=dict(l=10, r=10, t=40, b=10),
+        title="u(x) es ordinal: solo preserva orden (no intensidad)",
+        yaxis=dict(range=[-0.1, 1.1])
+    )
+    st.plotly_chart(fig_u, use_container_width=True)
 
-info_loss = 1 - (2 / n)
+# ========= TAB 2: Visualizacion =========
+with tab2:
+    st.subheader("Grafo de dominancia (estructura P -> P^c)")
+    st.caption("Todas las flechas estrictas van de P hacia P^c. Eso es exactamente la teoria de tus capturas, en una sola imagen.")
 
-col1, col2, col3 = st.columns(3)
+    P_idx = [i for i in range(n) if P[i]]
+    C_idx = [i for i in range(n) if not P[i]]
 
-col1.metric("Alternativas originales", f"{n}")
-col2.metric("Clases inducidas", "2")
-col3.metric("Pérdida de resolución", f"{info_loss:.1%}")
+    if not P_idx or not C_idx:
+        st.warning("No hay pares P -> P^c (si todo esta en P o todo en P^c, la relacion estricta queda vacia).")
+    else:
+        xP = np.linspace(0.1, 0.9, len(P_idx))
+        xC = np.linspace(0.1, 0.9, len(C_idx))
+        pos = {}
+        for k, i in enumerate(P_idx):
+            pos[i] = (xP[k], 0.82)
+        for k, i in enumerate(C_idx):
+            pos[i] = (xC[k], 0.18)
 
-st.markdown("---")
+        edges = [(i, j) for i in P_idx for j in C_idx][:max_edges]
+        total = len(edges)
+        step = st.slider("Flechas mostradas", 1, max(1, total), min(40, total) if total else 1, 1)
 
-st.markdown(
+        placeholder = st.empty()
+
+        def render(num_edges: int):
+            fig = go.Figure()
+
+            node_ids = list(pos.keys())
+            fig.add_trace(go.Scatter(
+                x=[pos[i][0] for i in node_ids],
+                y=[pos[i][1] for i in node_ids],
+                mode="markers+text",
+                text=[names[i] for i in node_ids],
+                textposition="top center",
+                hovertext=[f"{names[i]} | {'P' if P[i] else 'P^c'} | u={u(P[i])}" for i in node_ids],
+                hoverinfo="text",
+                marker=dict(size=22, color=[1 if P[i] else 0 for i in node_ids], colorscale="Plasma"),
+                showlegend=False
+            ))
+
+            for (i, j) in edges[:num_edges]:
+                fig.add_trace(go.Scatter(
+                    x=[pos[i][0], pos[j][0]],
+                    y=[pos[i][1], pos[j][1]],
+                    mode="lines",
+                    line=dict(width=2),
+                    showlegend=False,
+                    hoverinfo="skip"
+                ))
+                if show_edge_labels:
+                    fig.add_trace(go.Scatter(
+                        x=[(pos[i][0] + pos[j][0]) / 2],
+                        y=[(pos[i][1] + pos[j][1]) / 2],
+                        mode="text",
+                        text=[r"$\succ$"],
+                        showlegend=False,
+                        hoverinfo="skip"
+                    ))
+
+            fig.update_layout(
+                height=520,
+                margin=dict(l=10, r=10, t=40, b=10),
+                xaxis=dict(visible=False),
+                yaxis=dict(visible=False),
+                title=f"Relaciones estrictas mostradas: {min(num_edges,total)}/{total}"
+            )
+            return fig
+
+        if autoplay and total > 0:
+            for s in range(1, min(step + speed * 3, total) + 1, speed):
+                placeholder.plotly_chart(render(s), use_container_width=True)
+                time.sleep(max(0.02, 0.16 - 0.012 * speed))
+        else:
+            placeholder.plotly_chart(render(step), use_container_width=True)
+
+    st.subheader("Matriz de la relacion (tablero logico)")
+    R = build_rel(names, P)
+    H = rel_num(R)
+
+    # display matrix table (symbols with LaTeX rendering in caption)
+    fig_h = go.Figure(data=go.Heatmap(z=H, x=names, y=names))
+    for i in range(n):
+        for j in range(n):
+            # translate tokens to LaTeX for annotation
+            tok = R[i, j]
+            latex = {"succ": r"$\succ$", "succeq": r"$\succeq$", "preceq": r"$\preceq$", "~": r"$\sim$"}.get(tok, tok)
+            fig_h.add_annotation(x=names[j], y=names[i], text=latex, showarrow=False)
+    fig_h.update_layout(height=560, margin=dict(l=10, r=10, t=40, b=10), title="Bloques: dos clases de equivalencia + dominancia entre bloques")
+    st.plotly_chart(fig_h, use_container_width=True)
+
+# ========= TAB 3: Comparacion =========
+with tab3:
+    st.subheader("Comparacion (para cerrar como colega, no como estudiante)")
+
+    st.markdown(r"""
+### 1) Preferencia dicotomica (este modelo)
+- Estructura: dos bloques ($P$ / $P^c$)
+- Representacion: utilidad indicadora $u(x)\in\{0,1\}$
+- Propiedad: **maxima rigidez** (no hay informacion ordinal intra-bloque)
+
+### 2) Preferencias lexicograficas (jerarquia de criterios)
+- Idea: primero se ordena por un criterio principal; empates se rompen con el siguiente, etc.
+- Consecuencia: suelen ser **no representables por utilidad continua** (clasico en teoria de decision)
+- Ventaja: agregan informacion sin perder consistencia, pero cambian la topologia del problema
+
+### 3) Preferencias con umbral (threshold)
+- Idea: indiferencia dentro de una banda; preferencia fuera del umbral
+- Consecuencia: requieren un **parametro adicional** (el umbral) y normalmente un atributo medible
+- Ventaja: capturan "no me importa" en rangos pequenos
+
+### 4) Ranking completo (orden total refinado)
+- Idea: toda alternativa tiene un puesto unico (sin clases grandes de indiferencia)
+- Consecuencia: impone mas estructura; es una suposicion fuerte si no hay datos
+
+**Cierre:** Este modelo dicotomico es un **caso limite elegante**: consistente, completo y deliberadamente poco informativo.
+""")
+
+    st.subheader("Mensaje final listo para enviar")
+    final_msg = f"""Formalice tus notas como una relacion de preferencia dicotomica sobre X, con una particion P / P^c.
+
+- Preferencia estricta: x \\succ y  \\iff  x \\in P,\\; y \\in P^c
+- Indiferencia intra-bloque: x \\sim y  si ambos estan en P o ambos en P^c
+- Representacion ordinal natural: u(x)=1 si x\\in P, u(x)=0 si x\\in P^c, y x \\succeq y \\iff u(x)\\ge u(y)
+
+Lo interesante no es la definicion sino la rigidez: el preorden induce exactamente dos clases de equivalencia y no admite refinamiento ordinal sin supuestos extra (lexicografia, umbrales o atributos adicionales).
+
+P={P_set if P_set else ['∅']} | P^c={Pc_set if Pc_set else ['∅']}.
 """
-<div style="text-align:center; font-size:26px; color:#dddddd;">
-Esto no es una preferencia rica.<br>
-<b>Es un interruptor.</b>
-</div>
-""",
-unsafe_allow_html=True
-)
-
-st.markdown(
-"""
-<div style="text-align:center; font-size:22px; margin-top:10px; color:#aaaaaa;">
-u(x) ∈ {0, 1}
-</div>
-""",
-unsafe_allow_html=True
-)
+    st.text_area("Copia/pega", final_msg, height=230)
