@@ -1,4 +1,4 @@
-# Streamlit WOW – Preferencias Pinky
+# Preferencias Pinky
 
 ## Ejecutar
 ```bash
