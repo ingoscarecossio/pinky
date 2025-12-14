@@ -619,13 +619,13 @@ def make_report_markdown(
     else:
         lines.append("- **Resultado:** No consistente en k clases (o requiere más clases).")
     lines.append("")
-    lines.append("## 4) Siguiente paso")
+    lines.append("## 4) Hasta aqui entendì")
     lines.append("")
     lines.append("Si quieres, el siguiente paso natural sería:")
     lines.append("")
-    lines.append("- detección de incompletitud, o")
-    lines.append("- extensión a k clases, o")
-    lines.append("- exportar el diagnóstico como nota técnica PDF.")
+    lines.append("- Clase completa de economica, o")
+    lines.append("- lecturas relacionadas, o")
+    lines.append("- Quemar en la hoguera.")
     lines.append("")
     return "\n".join(lines)
 
@@ -676,8 +676,8 @@ def markdown_to_simple_html(md: str) -> str:
 
 # ------------------------------- UI -------------------------------
 
-st.title("🧠 Preferencias dicotómicas (P / Pᶜ) — Leidy edition")
-st.caption("Regalo técnico: demostración formal + lectura económica (screening / elegibilidad) + calculadora viva (preferencias → P/Pᶜ) + diagnóstico serio.")
+st.title("🧠 Preferencias dicotómicas (P / Pᶜ)")
+st.caption("Informe técnico: demostración formal + lectura económica (screening / elegibilidad) + calculadora (preferencias → P/Pᶜ) + diagnóstico.")
 
 with st.sidebar:
     st.header("⚙️ Controles")
@@ -739,11 +739,11 @@ k4.metric("Transitividad (⪰)", "✓" if check_transitivity(P) else "✗")
 tab1, tab2, tab3, tab_calc, tab_k, tab_rep, tab4, tab5 = st.tabs([
     "📐 Demostración formal",
     "🎨 Estructura visual",
-    "💼 Economía (precisa)",
+    "💼 Lectura Economica",
     "🧮 Calculadora (preferencias → P/Pᶜ)",
     "🔢 Extensión k-clases",
     "📄 Diagnóstico + Export",
-    "✉️ Mensaje para enviar",
+    "✉️ Mensaje",
     "🔬 Extra: Teoría",
 ])
 
@@ -960,7 +960,7 @@ Esto es targeting operativo, no bienestar social completo.
 # ------------------------------- Calculadora viva -------------------------------
 with tab_calc:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown("### 🧮 Calculadora viva (Leidy-level): tú declaras preferencias, yo infiero P/Pᶜ")
+    st.markdown("### 🧮 Calculadora: tú declaras preferencias, yo infiero P/Pᶜ")
     st.markdown(
         """
 **Entrada primitiva:** comparaciones declaradas (x ≻ y, x ∼ y).  
@@ -1355,11 +1355,7 @@ Este tab toma tus comparaciones (pegables) y produce:
                 st.markdown('<div class="highlight-box">', unsafe_allow_html=True)
                 st.markdown(
                     """
-Si quieres, el siguiente paso natural sería:
 
-- detección de incompletitud, o
-- extensión a k clases, o
-- exportar el diagnóstico como nota técnica PDF.
 """
                 )
                 st.markdown("</div>", unsafe_allow_html=True)
@@ -1385,11 +1381,6 @@ P={P_set if P_set else ['∅']} | Pᶜ={Pc_set if Pc_set else ['∅']}.
 La estructura es un preorden completo (completo + transitivo, pero no antisimétrico).
 La representación numérica u: X → {{0,1}} es minimal pero suficiente para capturar el orden.
 
-Si quieres, el siguiente paso natural sería:
-
-- detección de incompletitud, o
-- extensión a k clases, o
-- exportar el diagnóstico como nota técnica PDF.
 """
     st.text_area("Copia/pega", msg, height=330)
 
