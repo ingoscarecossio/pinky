@@ -12,9 +12,14 @@ import plotly.graph_objects as go
 # ============================================================
 # Preferencias dicotómicas P / Pᶜ — Leidy edition (precisa)
 # Streamlit Cloud friendly: sin matplotlib / sin reportlab
+# + Calculadora integrada (todo en un solo archivo)
 # ============================================================
 
-st.set_page_config(page_title="Preferencias dicotómicas — Leidy edition", page_icon="🧠", layout="wide")
+st.set_page_config(
+    page_title="Preferencias dicotómicas — Leidy edition",
+    page_icon="🧠",
+    layout="wide",
+)
 
 st.markdown(
     """
@@ -30,6 +35,8 @@ st.markdown(
         border-radius: 8px;
         margin: 12px 0;
       }
+      .small { font-size: 0.92rem; color: rgba(250,250,250,0.75); }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -104,8 +111,8 @@ def check_transitivity(P: List[bool]) -> bool:
 
 def has_strict_order(P: List[bool]) -> bool:
     """
-    Verifica si la relación es antisimétrica (orden parcial).
-    Para preferencias dicotómicas con |P|≥2 y |Pᶜ|≥2, esto NO se cumple
+    Verifica antisimetría (orden parcial).
+    Para preferencias dicotómicas con |P|≥2 y |Pᶜ|≥2, NO se cumple
     (hay indiferencia entre elementos distintos dentro de cada bloque).
     """
     n = len(P)
@@ -145,8 +152,8 @@ class ScreeningRule:
 def screening(theta: np.ndarray, rule: ScreeningRule, rng: np.random.Generator) -> Tuple[np.ndarray, np.ndarray]:
     """
     Retorna:
-      true_eligible: 1{theta >= theta_min} (verdad "latente")
-      decided_eligible: 1{theta_hat >= theta_min} con theta_hat = theta + eps
+      true_eligible: 1{theta >= theta_min} (verdad latente)
+      decided_eligible: 1{theta_hat >= theta_min}, theta_hat = theta + eps
     """
     eps = rng.normal(0.0, rule.sigma, size=theta.shape)
     theta_hat = theta + eps
@@ -156,9 +163,9 @@ def screening(theta: np.ndarray, rule: ScreeningRule, rng: np.random.Generator) 
 
 def confusion_counts(true_yes: np.ndarray, decided_yes: np.ndarray) -> Dict[str, int]:
     """
-    Matriz de confusión para clasificación binaria.
-    - FP (False Positive): error de inclusión (asignar a quien no cumple)
-    - FN (False Negative): error de exclusión (omitir a quien sí cumple)
+    Matriz de confusión:
+    - FP: error de inclusión
+    - FN: error de exclusión
     """
     tp = int(np.sum(true_yes & decided_yes))
     tn = int(np.sum((~true_yes) & (~decided_yes)))
@@ -168,8 +175,8 @@ def confusion_counts(true_yes: np.ndarray, decided_yes: np.ndarray) -> Dict[str,
 
 def policy_loss(cc: Dict[str, int], c_fp: float, c_fn: float) -> float:
     """
-    Pérdida operativa: costo por error de asignación.
-    No es bienestar completo; es métrica de targeting.
+    Pérdida operativa por errores de asignación (targeting).
+    No es bienestar completo: es una métrica operativa.
     """
     return c_fp * cc["FP"] + c_fn * cc["FN"]
 
@@ -177,10 +184,40 @@ def safe_rate(numerator: int, denominator: int) -> float | None:
     """Retorna tasa o None si denominador es cero."""
     return numerator / denominator if denominator > 0 else None
 
-# ------------------------------- UI -------------------------------
+# ------------------------------- Utilidades: calculadora -------------------------------
+
+def normalize_names(raw: str) -> List[str]:
+    tokens = [t.strip() for t in raw.replace(",", "\n").splitlines() if t.strip()]
+    seen = set()
+    out = []
+    for t in tokens:
+        if t not in seen:
+            out.append(t)
+            seen.add(t)
+    return out
+
+def relation_symbol_ascii(i: int, j: int, P: List[bool]) -> str:
+    # versión ASCII para export/uso rápido si se quiere
+    if i == j:
+        return "~"
+    if strict_pref(i, j, P):
+        return ">"
+    if indifferent(i, j, P):
+        return "~"
+    return ">=" if weak_pref(i, j, P) else "<="
+
+def build_symbol_matrix_df(names: List[str], P: List[bool], style: str = "unicode") -> pd.DataFrame:
+    n = len(names)
+    if style == "unicode":
+        M = [[symbol(i, j, P) for j in range(n)] for i in range(n)]
+    else:
+        M = [[relation_symbol_ascii(i, j, P) for j in range(n)] for i in range(n)]
+    return pd.DataFrame(M, index=names, columns=names)
+
+# ------------------------------- UI principal -------------------------------
 
 st.title("🧠 Preferencias dicotómicas (P / Pᶜ) — Leidy edition")
-st.caption("Regalo técnico: demostración formal + lectura económica (screening / elegibilidad).")
+st.caption("Regalo técnico: demostración formal + lectura económica (screening / elegibilidad) + calculadora.")
 
 with st.sidebar:
     st.header("⚙️ Controles")
@@ -214,11 +251,10 @@ with st.sidebar:
         sigma = st.slider("Error de medición σ", 0.0, 1.0, 0.25, 0.05)
         rule = ScreeningRule(theta_min=theta_min, sigma=sigma)
 
-        # atributo latente
         theta = rng.normal(0.0, 1.0, size=n)
         true_eligible, decided_eligible = screening(theta, rule, rng)
 
-        # En el modelo de preferencia usamos la decisión observada/institucional: P ≡ elegibles decididos
+        # En el modelo de preferencia usamos la decisión observada: P ≡ elegibles decididos
         P = list(decided_eligible.astype(bool))
 
     st.divider()
@@ -237,19 +273,22 @@ k2.metric("|Pᶜ|", len(Pc_set))
 k3.metric("Completitud (⪰)", "✓" if check_completeness(P) else "✗")
 k4.metric("Transitividad (⪰)", "✓" if check_transitivity(P) else "✗")
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📐 Demostración formal", 
-    "🎨 Estructura visual", 
-    "💼 Economía (precisa)", 
-    "✉️ Mensaje para enviar",
-    "🔬 Extra: Teoría"
-])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+    [
+        "📐 Demostración formal",
+        "🎨 Estructura visual",
+        "💼 Economía (precisa)",
+        "🧮 Calculadora",
+        "✉️ Mensaje para enviar",
+        "🔬 Extra: Teoría",
+    ]
+)
 
 # ------------------------------- Demostración formal -------------------------------
 with tab1:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown(f"### {leidy_name}, tu demo formalizada (con precisión)")
-    
+
     st.markdown("**1) Partición del conjunto de alternativas**")
     st.latex(r"\text{Sea } X \text{ el conjunto de alternativas. Defina } P\subset X \text{ y } P^c = X\setminus P.")
 
@@ -262,7 +301,7 @@ with tab1:
     st.markdown("**4) Preferencia débil y representación por utilidad indicadora**")
     st.latex(r"u(x)=\begin{cases}1 & \text{si } x\in P\\0 & \text{si } x\in P^c\end{cases}")
     st.latex(r"x \succeq y \iff u(x)\geq u(y).")
-    
+
     st.markdown("**5) Equivalencia lógica (derivación)**")
     st.latex(r"x \succeq y \iff u(x)\geq u(y) \iff \neg(x\in P^c \wedge y\in P) \iff (x\in P) \vee (y\in P^c).")
 
@@ -274,8 +313,8 @@ with tab1:
         r"""
 - El modelo induce **exactamente dos clases de equivalencia**: $P$ y $P^c$.  
 - La relación $\succeq$ es **completa** y **transitiva** $\Rightarrow$ es un **preorden completo**.  
-- Usualmente **no** es antisimétrica (hay indiferencia con $x\neq y$), por eso no es orden parcial estricto.
-- La representación numérica $u: X \to \{0,1\}$ es una **función de utilidad ordinal**.
+- Usualmente **no** es antisimétrica (hay indiferencia con $x\neq y$), por eso no es orden parcial estricto.  
+- La representación numérica $u: X \to \{0,1\}$ es una **función de utilidad ordinal** (no cardinal).
 """
     )
     st.markdown("</div>", unsafe_allow_html=True)
@@ -317,11 +356,16 @@ with tab2:
                 for j in bot:
                     xs += [pos[i][0], pos[j][0], None]
                     ys += [pos[i][1], pos[j][1], None]
-            fig.add_trace(go.Scatter(
-                x=xs, y=ys, mode="lines", 
-                line=dict(width=1.5, color="rgba(99,102,241,0.3)"), 
-                hoverinfo="skip", showlegend=False
-            ))
+            fig.add_trace(
+                go.Scatter(
+                    x=xs,
+                    y=ys,
+                    mode="lines",
+                    line=dict(width=1.5, color="rgba(99,102,241,0.3)"),
+                    hoverinfo="skip",
+                    showlegend=False,
+                )
+            )
 
             fig.update_layout(
                 height=520,
@@ -337,10 +381,16 @@ with tab2:
         st.markdown('<div class="muted">El símbolo aparece en hover sobre cada celda.</div>', unsafe_allow_html=True)
 
         hover = [[f"{names[i]} vs {names[j]}: {S[i,j]}" for j in range(n)] for i in range(n)]
-        fig_h = go.Figure(go.Heatmap(
-            z=Z, x=names, y=names, text=hover, hoverinfo="text",
-            colorscale="Viridis"
-        ))
+        fig_h = go.Figure(
+            go.Heatmap(
+                z=Z,
+                x=names,
+                y=names,
+                text=hover,
+                hoverinfo="text",
+                colorscale="Viridis",
+            )
+        )
         fig_h.update_layout(height=520, margin=dict(l=10, r=10, t=40, b=10))
         st.plotly_chart(fig_h, use_container_width=True)
 
@@ -350,34 +400,36 @@ with tab2:
 
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown("### Axiomas y tipo de objeto (diagnóstico formal)")
-    
+
     completeness = check_completeness(P)
     transitivity = check_transitivity(P)
     antisymmetry = has_strict_order(P)
-    
-    st.write({
-        "Completitud (⪰)": "✓ Cumple" if completeness else "✗ No cumple",
-        "Transitividad (⪰)": "✓ Cumple" if transitivity else "✗ No cumple",
-        "Antisimetría": "✓ Es orden parcial" if antisymmetry else "✗ Hay indiferencias no triviales",
-        "Tipo de estructura": "Preorden completo con dos clases de equivalencia"
-    })
+
+    st.write(
+        {
+            "Completitud (⪰)": "✓ Cumple" if completeness else "✗ No cumple",
+            "Transitividad (⪰)": "✓ Cumple" if transitivity else "✗ No cumple",
+            "Antisimetría": "✓ Es orden parcial" if antisymmetry else "✗ Hay indiferencias no triviales",
+            "Tipo de estructura": "Preorden completo con dos clases de equivalencia",
+        }
+    )
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ------------------------------- Economía -------------------------------
 with tab3:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown("### Intento de lectura económica (hice mi tarea 📚)")
+    st.markdown("### Lectura económica (precisa)")
+
     st.markdown(
         r"""
-Interpretación desde teoría económica:
+- **Screening / regla de elegibilidad:** $P$ es el conjunto “aprobado/elegible”; $P^c$ “no elegible”.  
+- **Señal con error:** la decisión puede basarse en una medición imperfecta $\hat{\theta}=\theta+\varepsilon$.  
+- **Errores de targeting:**  
+  - **FP:** error de inclusión — asignas elegibilidad a quien no cumple el criterio latente.  
+  - **FN:** error de exclusión — excluyes a quien sí cumple el criterio latente.  
 
-- **Screening / regla de elegibilidad**: $P$ es el conjunto "aprobado/elegible"; $P^c$ es "no elegible".  
-- **Señal con error**: la decisión puede basarse en una medición imperfecta $\hat{\theta}=\theta+\varepsilon$.  
-- **Errores de targeting**:  
-  - **FP (false positive)**: error de inclusión — asignas elegibilidad a quien no cumple el criterio latente.  
-  - **FN (false negative)**: error de exclusión — excluyes a quien sí cumple el criterio latente.  
-
-**Nota conceptual:** la preferencia dicotómica no "mide intensidad"; modela una **decisión binaria** coherente con una regla de asignación. La utilidad $u(x)\in\{0,1\}$ es puramente ordinal, no cardinal.
+**Nota conceptual:** la preferencia dicotómica no modela intensidad; modela una **decisión binaria** coherente con una regla de asignación.
+La utilidad $u(x)\in\{0,1\}$ es ordinal (no cardinal).
 """
     )
     st.markdown("</div>", unsafe_allow_html=True)
@@ -386,13 +438,15 @@ Interpretación desde teoría económica:
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.markdown("### Mini-experimento reproducible: elegibilidad con medición imperfecta")
 
-        df = pd.DataFrame({
-            "Alternativa": names,
-            "θ (latente)": np.round(theta, 3),
-            "Elegible (verdad: θ≥θ_min)": true_eligible,
-            "Elegible (decisión: θ̂≥θ_min)": decided_eligible,
-            "u(x)": [u(bool(v)) for v in decided_eligible],
-        }).sort_values(["u(x)", "θ (latente)"], ascending=[False, False])
+        df = pd.DataFrame(
+            {
+                "Alternativa": names,
+                "θ (latente)": np.round(theta, 3),
+                "Elegible (verdad: θ≥θ_min)": true_eligible,
+                "Elegible (decisión: θ̂≥θ_min)": decided_eligible,
+                "u(x)": [u(bool(v)) for v in decided_eligible],
+            }
+        ).sort_values(["u(x)", "θ (latente)"], ascending=[False, False])
 
         st.dataframe(df, use_container_width=True, hide_index=True)
 
@@ -407,27 +461,122 @@ Interpretación desde teoría económica:
 
         fpr = safe_rate(cc["FP"], cc["FP"] + cc["TN"])
         fnr = safe_rate(cc["FN"], cc["FN"] + cc["TP"])
-        
-        st.write({
-            "θ_min (umbral)": rule.theta_min,
-            "σ (error de medición)": rule.sigma,
-            "Confusión": cc,
-            "FPR (FP/(FP+TN))": f"{fpr:.3f}" if fpr is not None else "N/A (sin negativos verdaderos)",
-            "FNR (FN/(FN+TP))": f"{fnr:.3f}" if fnr is not None else "N/A (sin positivos verdaderos)",
-        })
+
+        st.write(
+            {
+                "θ_min (umbral)": rule.theta_min,
+                "σ (error de medición)": rule.sigma,
+                "Confusión": cc,
+                "FPR (FP/(FP+TN))": f"{fpr:.3f}" if fpr is not None else "N/A",
+                "FNR (FN/(FN+TP))": f"{fnr:.3f}" if fnr is not None else "N/A",
+            }
+        )
 
         st.markdown(
             r"""
 **Interpretación:** la regla induce $P$ como conjunto elegible observado.  
-La preferencia dicotómica sigue siendo consistente; lo que se discute económicamente es el **mecanismo de medición** y el **trade-off** entre FP y FN (costos de asignación).
-
-El parámetro $\sigma$ controla el nivel de ruido: a mayor $\sigma$, mayor probabilidad de clasificación errónea.
+La discusión económica relevante está en el **mecanismo de medición** y el **trade-off** FP vs FN (costos de asignación).  
+$\sigma$ controla el ruido: mayor $\sigma$ ⇒ mayor probabilidad de clasificación errónea.
 """
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
-# ------------------------------- Mensaje -------------------------------
+# ------------------------------- Calculadora -------------------------------
 with tab4:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown("### 🧮 Calculadora (para casos reales)")
+    st.markdown(
+        """
+Esta calculadora toma un conjunto de alternativas X y un conjunto aprobado P (o lo induce con umbral) y te responde:
+- u(x), u(y)
+- si x⪰y, si x≻y, si x~y
+- la matriz completa de símbolos, descargable.
+"""
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    colL, colR = st.columns([1.0, 1.05], gap="large")
+
+    with colL:
+        st.subheader("Entrada")
+        raw = st.text_area(
+            "Alternativas X (una por línea o separadas por coma)",
+            value="x1\nx2\nx3\nx4\nx5",
+            height=140,
+        )
+        calc_names = normalize_names(raw)
+        if len(calc_names) < 2:
+            st.warning("Ingresa al menos 2 alternativas.")
+            st.stop()
+
+        calc_mode = st.radio("Definir P en la calculadora", ["Manual", "Por umbral (screening)"], index=0)
+        calc_seed = st.number_input("Semilla (calculadora)", value=7, step=1)
+        calc_rng = np.random.default_rng(int(calc_seed))
+
+        calc_theta = None
+        calc_theta_min = None
+        calc_sigma = None
+
+        if calc_mode == "Manual":
+            st.markdown("**Selecciona P**")
+            calc_P = [st.checkbox(f"{nm} ∈ P (calc)", value=False, key=f"calc_{nm}") for nm in calc_names]
+        else:
+            st.markdown("**Screening**")
+            calc_theta_min = st.slider("θ_min (calc)", -2.0, 2.0, 0.0, 0.05)
+            calc_sigma = st.slider("σ (calc)", 0.0, 1.0, 0.25, 0.05)
+            calc_theta = calc_rng.normal(0.0, 1.0, size=len(calc_names))
+            eps = calc_rng.normal(0.0, float(calc_sigma), size=len(calc_names))
+            theta_hat = calc_theta + eps
+            calc_P = list((theta_hat >= float(calc_theta_min)).astype(bool))
+
+        Pcalc_set = [calc_names[i] for i, v in enumerate(calc_P) if v]
+        Pcalc_c_set = [calc_names[i] for i, v in enumerate(calc_P) if not v]
+
+        st.markdown("**Bloques**")
+        st.write({"P": Pcalc_set if Pcalc_set else ["∅"], "Pᶜ": Pcalc_c_set if Pcalc_c_set else ["∅"]})
+
+        if calc_mode != "Manual":
+            st.markdown("**Detalle θ (calc)**")
+            df_theta = pd.DataFrame(
+                {
+                    "alternativa": calc_names,
+                    "theta": np.round(calc_theta, 3),
+                    "en_P (decisión)": calc_P,
+                    "u(x)": [u(v) for v in calc_P],
+                }
+            ).sort_values(["u(x)", "theta"], ascending=[False, False])
+            st.dataframe(df_theta, use_container_width=True, hide_index=True)
+
+    with colR:
+        st.subheader("Consulta par a par")
+        x = st.selectbox("x (calc)", calc_names, index=0)
+        y = st.selectbox("y (calc)", calc_names, index=1 if len(calc_names) > 1 else 0)
+
+        ix, iy = calc_names.index(x), calc_names.index(y)
+
+        st.markdown("**Resultado**")
+        st.write(
+            {
+                "u(x)": u(calc_P[ix]),
+                "u(y)": u(calc_P[iy]),
+                "x ⪰ y": bool(weak_pref(ix, iy, calc_P)),
+                "x ≻ y": bool(strict_pref(ix, iy, calc_P)),
+                "x ~ y": bool(indifferent(ix, iy, calc_P)),
+                "símbolo (unicode)": symbol(ix, iy, calc_P),
+                "símbolo (ascii)": relation_symbol_ascii(ix, iy, calc_P),
+            }
+        )
+
+        st.subheader("Matriz de la relación (calculadora)")
+        style = st.radio("Formato de símbolos", ["unicode", "ascii"], horizontal=True)
+        M = build_symbol_matrix_df(calc_names, calc_P, style=style)
+        st.dataframe(M, use_container_width=True)
+
+        csv = M.to_csv().encode("utf-8")
+        st.download_button("Descargar matriz (CSV)", data=csv, file_name="relacion_P_Pc.csv", mime="text/csv")
+
+# ------------------------------- Mensaje -------------------------------
+with tab5:
     st.subheader("No es mucho pero es trabajo honesto 💪")
 
     msg = f"""{leidy_name},
@@ -447,82 +596,40 @@ La estructura es un preorden completo (completo + transitivo, pero no antisimét
 La representación numérica u: X → {{0,1}} es minimal pero suficiente para capturar el orden.
 """
     st.text_area("Copia/pega", msg, height=300)
-
-    st.markdown('<div class="muted">Nota técnica: las ecuaciones LaTeX se renderizan correctamente con st.latex().</div>', unsafe_allow_html=True)
+    st.markdown('<div class="muted">Nota técnica: las ecuaciones se renderizan con st.latex().</div>', unsafe_allow_html=True)
 
 # ------------------------------- Extra: Teoría -------------------------------
-with tab5:
+with tab6:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown("### 🔬 Insight teórico adicional: representabilidad y extensiones")
-    
+
     if show_insights:
         st.markdown(
             r"""
-#### 1. Teorema de representación (Debreu, 1954)
-Una relación de preferencia $\succeq$ sobre $X$ admite representación por función de utilidad $u: X \to \mathbb{R}$ 
-tal que $x \succeq y \iff u(x) \geq u(y)$ si y solo si:
-- $\succeq$ es completa
-- $\succeq$ es transitiva  
-- $X$ es numerable o $\succeq$ es continua (en espacios topológicos)
+#### 1) Representación por utilidad (caso finito)
+En un conjunto finito, si $\succeq$ es completa y transitiva, siempre existe una representación numérica.
+Aquí la más simple es $u(x)\in\{0,1\}$, con $u(P)=1$ y $u(P^c)=0$.
 
-**En nuestro caso:** $X$ es finito, $\succeq$ es completa y transitiva $\Rightarrow$ siempre existe representación numérica. 
-La función $u(x) \in \{0,1\}$ es la **más simple** (solo 2 valores), pero podríamos usar cualquier $u: P \to \{a\}, P^c \to \{b\}$ con $a > b$.
+#### 2) Unicidad (ordinal)
+La representación es única salvo transformaciones monótonas crecientes: si $u$ representa $\succeq$, entonces $f\circ u$ también representa $\succeq$ para toda $f$ estrictamente creciente.
 
----
-
-#### 2. Unicidad de la representación
-La función $u$ es única **salvo transformaciones monótonas crecientes**. Es decir, si $u$ representa $\succeq$, 
-entonces $v = f \circ u$ también representa $\succeq$ si $f$ es estrictamente creciente.
-
-Ejemplo: $u(x) \in \{0, 1\}$ y $v(x) = 100 \cdot u(x) \in \{0, 100\}$ representan la misma preferencia.
-
----
-
-#### 3. Extensión a más clases
-¿Qué pasa si queremos más de 2 clases de equivalencia? Necesitamos:
-- Una partición de $X$ en $k$ bloques: $X = C_1 \sqcup C_2 \sqcup \ldots \sqcup C_k$
-- Un orden total sobre los bloques: $C_1 \succ C_2 \succ \ldots \succ C_k$
-- Función de utilidad: $u(x) = i$ si $x \in C_i$
-
-Esto sigue siendo un **preorden completo**, pero con $k$ clases de equivalencia en lugar de 2.
-
----
-
-#### 4. Conexión con teoría de elección social
-En teoría de votación/elección social (Arrow, Sen), las preferencias dicotómicas aparecen como:
-- **Approval voting**: cada votante "aprueba" o "rechaza" candidatos (partición binaria)
-- **Quota rules**: una alternativa es elegida si supera un umbral de aprobación
-
-La agregación de preferencias dicotómicas individuales en una decisión colectiva es menos problemática 
-que la agregación de rankings completos (evita paradojas como ciclos de Condorcet en muchos casos).
-
----
-
-#### 5. Limitación fundamental
-La preferencia dicotómica **no** puede distinguir intensidades dentro de cada bloque. Por ejemplo:
-- Si $x_1, x_2 \in P$, el modelo dice $x_1 \sim x_2$ (indiferencia)
-- Pero en la realidad, podrías preferir $x_1$ sobre $x_2$ (preferencia débil pero no estricta dentro de $P$)
-
-Para capturar esto, necesitas:
-- **Refinamiento de la partición** (más clases)
-- **Atributos multidimensionales** (preferencias lexicográficas)
-- **Estructura probabilística** (loterías sobre alternativas)
+#### 3) Generalización a k clases
+Si en vez de dos clases quieres $k$ clases de equivalencia, necesitas una partición $X=\bigsqcup_{i=1}^k C_i$ y un orden total sobre los bloques.
+Definiendo $u(x)=i$ si $x\in C_i$, obtienes un preorden completo con $k$ niveles.
 """
         )
-        
+
         st.markdown('<div class="highlight-box">', unsafe_allow_html=True)
         st.markdown(
             r"""
-**Conclusión filosófica:** las preferencias dicotómicas son un modelo **minimal pero coherente**. 
-Sacrifican riqueza expresiva (intensidad intra-bloque) a cambio de simplicidad analítica y robustez axiomática.
-Son ideales para modelar decisiones binarias institucionales (elegibilidad, aprobación, cumplimiento de umbral)
-donde la granularidad fina no es necesaria o no es observable.
+**Conclusión:** es un modelo minimal pero coherente. Perfecto para reglas binarias institucionales
+(elegibilidad, aprobación, umbrales), donde la granularidad intra-bloque no es observable o no es relevante.
 """
         )
         st.markdown("</div>", unsafe_allow_html=True)
     else:
-        st.info("👆 Activa 'Mostrar insight teórico adicional' en el sidebar para ver el análisis profundo.")
-    
+        st.info("Activa 'Mostrar insight teórico adicional' en el sidebar para ver el análisis profundo.")
+
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ------------------------------- Footer -------------------------------
