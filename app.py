@@ -239,7 +239,7 @@ with tab1:
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown("### Consecuencia estructural (sin exagerar)")
+    st.markdown("### Consecuencia estructural")
     st.markdown(
         """
 - El modelo induce **exactamente dos clases de equivalencia**: \(P\) y \(P^c\).  
@@ -311,7 +311,7 @@ with tab2:
             st.dataframe(pd.DataFrame(S, index=names, columns=names), use_container_width=True)
 
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown("### Axiomas y tipo de objeto (diagnóstico formal)")
+    st.markdown("### Axiomas y tipo de objeto")
     st.write(
         {
             "Completitud (⪰)": check_completeness(P),
@@ -325,7 +325,7 @@ with tab2:
 # ------------------------------- Economía (precisa) -------------------------------
 with tab3:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown("### Lectura económica (precisa, sin analogías baratas)")
+    st.markdown("### Intento de lectura económica (No me quemes pls, lei mucho para acercarme")
     st.markdown(
         """
 Interpretación estándar:
@@ -336,7 +336,7 @@ Interpretación estándar:
   - **FP (false positive / Type I)**: asignas elegibilidad a quien no cumple el criterio latente.  
   - **FN (false negative / Type II)**: excluyes a quien sí cumple el criterio latente.  
 
-Punto clave: la preferencia dicotómica no “mide intensidad”; modela una **decisión binaria** coherente con una regla de asignación.
+Nota a la lectora: la preferencia dicotómica no “mide intensidad”; modela una **decisión binaria** coherente con una regla de asignación (Segun google).
 """
     )
     st.markdown("</div>", unsafe_allow_html=True)
@@ -386,7 +386,7 @@ La preferencia dicotómica sigue siendo consistente; lo que se discute económic
 
 # ------------------------------- Mensaje -------------------------------
 with tab4:
-    st.subheader("Mensaje listo (técnico, breve, sin pretensión)")
+    st.subheader("No es mucho pero es trabajo honesto")
 
     msg = f"""{leidy_name},
 
@@ -394,7 +394,7 @@ Formalizé tu construcción como una preferencia dicotómica sobre X mediante un
 x ≻ y ⇔ (x∈P) ∧ (y∈Pᶜ), con indiferencia dentro de cada bloque.
 La preferencia débil se representa con utilidad indicadora u(x)∈{{0,1}} y x ⪰ y ⇔ u(x) ≥ u(y).
 
-Lectura económica: esto es una regla de elegibilidad (screening/approval). No intenta “rankear” intensidad;
+Mi lectura: esto es una regla de elegibilidad (screening/approval). No pretende “rankear” intensidad;
 define consistencia ordinal entre aprobados y no aprobados. El punto interesante es la rigidez:
 dos clases de equivalencia y cero orden intra-bloque; cualquier refinamiento exige supuestos extra
 (atributos adicionales, umbrales, o estructura lexicográfica).
