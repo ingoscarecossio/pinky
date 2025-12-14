@@ -527,4 +527,4 @@ donde la granularidad fina no es necesaria o no es observable.
 
 # ------------------------------- Footer -------------------------------
 st.divider()
-st.caption("Hecho con 🧠, ☕ y mucho amor matemático para Leidy. Versión final corregida.")
+st.caption("Hecho con 🧠, ☕ y mucho respeto matemático para Leidy. No me quemes porfavor!")
